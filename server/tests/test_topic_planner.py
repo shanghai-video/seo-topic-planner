@@ -619,6 +619,96 @@ class TopicPlannerTest(unittest.TestCase):
                 provider.expand("seed", market="US", language="en")
             self.assertEqual(calls["n"], 1)
 
+    def test_live_provider_failure_propagates_status_and_keyword(self):
+        import os
+        from unittest import mock
+
+        body = json.dumps(
+            {
+                "status_code": 20000,
+                "tasks": [
+                    {
+                        "status_code": 40501,
+                        "status_message": "Invalid Field: keyword.",
+                        "result": None,
+                    }
+                ],
+            }
+        ).encode()
+
+        class FakeResponse:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return body
+
+        environment = {
+            "TOPIC_PLANNER_ENABLE_LIVE_DATAFORSEO": "1",
+            "DATAFORSEO_LOGIN": "x",
+            "DATAFORSEO_PASSWORD": "y",
+        }
+        with mock.patch.dict(os.environ, environment):
+            provider = DataForSeoProvider(enabled=True, retries=0, backoff=0.0)
+            with mock.patch(
+                "urllib.request.urlopen", lambda request, timeout=None: FakeResponse()
+            ), self.assertRaises(ProviderError) as caught:
+                provider.search(
+                    "enterprise agents",
+                    market="United States",
+                    language="en",
+                    device="desktop",
+                )
+        message = str(caught.exception)
+        self.assertIn("status_code=20000", message)
+        self.assertIn("task_status_code=40501", message)
+        self.assertIn("Invalid Field: keyword.", message)
+        self.assertIn("enterprise agents", message)
+
+    def test_mcp_provider_failure_propagates_status_and_keyword(self):
+        def transport(payload, session_id):
+            if payload.get("method") == "initialize":
+                return {"result": {"protocolVersion": "2025-06-18"}}, {"Mcp-Session-Id": "session-test"}
+            if payload.get("method") == "notifications/initialized":
+                return {}, {}
+            return {
+                "result": {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps(
+                                {
+                                    "status_code": 40100,
+                                    "status_message": "Task queue is empty.",
+                                    "tasks": [
+                                        {
+                                            "status_code": 40501,
+                                            "status_message": "Invalid Field: location_name.",
+                                        }
+                                    ],
+                                }
+                            ),
+                        }
+                    ]
+                }
+            }, {}
+
+        provider = DataForSeoMcpProvider(
+            endpoint="https://mcp.example.test/mcp", access_token="tok", transport=transport
+        )
+        with self.assertRaises(ProviderError) as caught:
+            provider.search("enterprise agents", market="United States", language="en", device="desktop")
+        message = str(caught.exception)
+        self.assertIn("status_code=40100", message)
+        self.assertIn("task_status_code=40501", message)
+        self.assertIn("Invalid Field: location_name.", message)
+        self.assertIn("enterprise agents", message)
+
     def test_official_mcp_provider_handles_sse_and_stateless_server(self):
         from unittest import mock
 

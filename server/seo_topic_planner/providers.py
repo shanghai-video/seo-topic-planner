@@ -51,6 +51,48 @@ def _request_id(operation: str, value: object) -> str:
     return f"{operation}_{hashlib.sha256(material).hexdigest()[:16]}"
 
 
+def _status_subject(subject: object) -> str:
+    """Render the keyword(s) or topic a failed DataForSEO call was made for."""
+    if isinstance(subject, str):
+        return subject.strip()
+    if isinstance(subject, (list, tuple)):
+        return ", ".join(str(item).strip() for item in subject if str(item).strip())
+    return ""
+
+
+def _unsuccessful_status_message(
+    operation: str,
+    payload: dict[str, Any],
+    response_task: object,
+    subject: object = None,
+) -> str:
+    """Describe a non-20000 DataForSEO status without exposing credentials.
+
+    DataForSEO reports the reason at the top level, the task level, or both.
+    Keep the raw ``status_code``/``status_message`` and the keyword that
+    triggered the failure so a live failure can be diagnosed instead of
+    collapsing into a generic "unsuccessful status".
+    """
+    detail: list[str] = []
+    if isinstance(payload, dict):
+        if payload.get("status_code") is not None:
+            detail.append(f"status_code={payload.get('status_code')}")
+        top_message = str(payload.get("status_message") or "").strip()
+        if top_message and top_message.lower() != "ok.":
+            detail.append(f"status_message={top_message!r}")
+    if isinstance(response_task, dict):
+        if response_task.get("status_code") is not None:
+            detail.append(f"task_status_code={response_task.get('status_code')}")
+        task_message = str(response_task.get("status_message") or "").strip()
+        if task_message and task_message.lower() != "ok.":
+            detail.append(f"task_status_message={task_message!r}")
+    subject_text = _status_subject(subject)
+    if subject_text:
+        detail.append(f"keyword={subject_text!r}")
+    suffix = f" ({', '.join(detail)})" if detail else ""
+    return f"DataForSEO {operation} returned an unsuccessful status{suffix}"
+
+
 # DataForSEO's ``location_name`` requires a full location name, not a country
 # code.  Normalize the common codes the Planner accepts; pass anything else
 # through unchanged.
@@ -359,7 +401,8 @@ class DataForSeoProvider:
         tasks = payload.get("tasks") if isinstance(payload, dict) else None
         first = tasks[0] if isinstance(tasks, list) and tasks else {}
         if payload.get("status_code") != 20000 or first.get("status_code") != 20000:
-            raise ProviderError(f"DataForSEO {operation} returned an unsuccessful status")
+            subject = (task.get("keyword") or task.get("keywords")) if isinstance(task, dict) else None
+            raise ProviderError(_unsuccessful_status_message(operation, payload, first, subject))
         return ProviderResponse(
             self.name,
             _request_id(operation, task),
@@ -631,11 +674,13 @@ class DataForSeoMcpProvider:
         return self._content_json(result)
 
     @staticmethod
-    def _task(payload: dict[str, Any], operation: str) -> tuple[dict[str, Any], float]:
+    def _task(
+        payload: dict[str, Any], operation: str, subject: object = None
+    ) -> tuple[dict[str, Any], float]:
         tasks = payload.get("tasks") if isinstance(payload, dict) else None
         first = tasks[0] if isinstance(tasks, list) and tasks and isinstance(tasks[0], dict) else {}
         if payload.get("status_code") != 20000 or first.get("status_code") != 20000:
-            raise ProviderError(f"DataForSEO MCP {operation} returned an unsuccessful status")
+            raise ProviderError(_unsuccessful_status_message(operation, payload, first, subject))
         return first, float(first.get("cost") or 0)
 
     def expand(self, seed_topic: str, *, market: str, language: str) -> ProviderResponse:
@@ -650,7 +695,7 @@ class DataForSeoMcpProvider:
                 }
             ],
         )
-        task, cost = self._task(payload, "keyword expansion")
+        task, cost = self._task(payload, "keyword expansion", seed_topic)
         rows = task.get("result") or []
         first = rows[0] if rows and isinstance(rows[0], dict) else {}
         items = first.get("items") or []
@@ -670,7 +715,7 @@ class DataForSeoMcpProvider:
                 }
             ],
         )
-        task, cost = self._task(payload, "keyword metrics")
+        task, cost = self._task(payload, "keyword metrics", keywords)
         rows = task.get("result") or []
         metrics = [
             {
@@ -700,7 +745,7 @@ class DataForSeoMcpProvider:
                 }
             ],
         )
-        task, cost = self._task(payload, "SERP")
+        task, cost = self._task(payload, "SERP", keyword)
         result = (task.get("result") or [{}])[0]
         items = result.get("items") if isinstance(result, dict) else []
         normalized = _normalize_serp_items(keyword, items)
