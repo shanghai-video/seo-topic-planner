@@ -46,6 +46,17 @@ class CollectFilesTest(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 collect_files(root)
 
+    def test_repository_metadata_is_skipped_not_shipped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "plugin.json").write_text("{}", encoding="utf-8")
+            (root / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
+            workflows = root / ".github" / "workflows"
+            workflows.mkdir(parents=True)
+            (workflows / "ci.yml").write_text("on: push\n", encoding="utf-8")
+            collected = [item.as_posix() for item in collect_files(root)]
+            self.assertEqual(collected, ["plugin.json"])
+
 
 class BuildTest(unittest.TestCase):
     def test_build_archive_contains_manifest_and_no_artifacts(self):

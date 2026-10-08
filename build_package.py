@@ -32,6 +32,11 @@ def collect_files(root: Path = ROOT) -> list[Path]:
             raise RuntimeError(f"forbidden file in package: {relative.as_posix()}")
         if path.suffix.lower() in FORBIDDEN_SUFFIXES or path.name in FORBIDDEN_NAMES:
             raise RuntimeError(f"forbidden file in package: {relative.as_posix()}")
+        # Repository metadata such as ``.gitignore`` or a ``.github`` workflow is
+        # not part of the portable plugin package.  Secrets and caches were
+        # already rejected (or skipped) above.
+        if any(part.startswith(".") for part in relative.parts):
+            continue
         files.append(relative)
     return files
 
