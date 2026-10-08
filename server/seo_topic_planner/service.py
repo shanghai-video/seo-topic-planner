@@ -22,10 +22,13 @@ from .models import (
     ENTITY_TYPES,
     EVIDENCE_FAMILIES,
     EVIDENCE_READINESS,
+    EXTERNAL_EVIDENCE_FAMILIES,
     FUNNEL_STAGES,
     OBSERVATION_SOURCE_TYPES,
     RELATION_TYPES,
     SERP_SOURCE_TYPES,
+    SOURCE_ATTEMPT_METHODS,
+    SOURCE_ATTEMPT_OUTCOMES,
     TOPICAL_ENTITY_TYPES,
     BrandEntity,
     BrandProfile,
@@ -38,6 +41,7 @@ from .models import (
     ResearchRun,
     ResearchStatus,
     SiteSnapshot,
+    SourceAttempt,
     SourceObservation,
     TopicalEntity,
     TopicCluster,
@@ -2092,6 +2096,85 @@ class TopicPlannerService:
             rows = self.store.list(workspace_id=workspace_id, object_type="source_observation")
         return [item.to_dict() for item in rows]
 
+    def record_source_attempts(
+        self,
+        *,
+        workspace_id: str,
+        attempts: list[dict[str, Any]],
+        research_run_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Persist external sources the host agent tried but could not read.
+
+        The gate requires external evidence.  A blocked or unavailable source is
+        recorded here with a method, an outcome and a reason so the gap stays
+        visible instead of being silently skipped or fabricated.  Attempts are
+        keyed deterministically, so re-submitting the same attempt is idempotent
+        and an attempt never counts as research evidence.
+        """
+        workspace_id = self._workspace(workspace_id)
+        if not isinstance(attempts, list) or not attempts:
+            raise ValidationError("at least one source attempt is required")
+        brand_id: str | None = None
+        if research_run_id:
+            run = self.store.get(
+                research_run_id, workspace_id=workspace_id, object_type="research_run"
+            )
+            assert isinstance(run, ResearchRun)
+            brand_id = run.brand_id
+        saved: list[dict[str, Any]] = []
+        for raw in attempts:
+            if not isinstance(raw, dict):
+                raise ValidationError("each source attempt must be an object")
+            source_type = str(raw.get("source_type") or "").strip()
+            if source_type not in OBSERVATION_SOURCE_TYPES:
+                raise ValidationError("unsupported source_attempt source type")
+            method = str(raw.get("method") or "browser").strip()
+            if method not in SOURCE_ATTEMPT_METHODS:
+                raise ValidationError("unsupported source_attempt method")
+            outcome = str(raw.get("outcome") or "blocked").strip()
+            if outcome not in SOURCE_ATTEMPT_OUTCOMES:
+                raise ValidationError("unsupported source_attempt outcome")
+            url = str(raw.get("url") or "").strip()
+            reason = str(raw.get("reason") or "").strip()
+            attempted_at = str(raw.get("attempted_at") or "").strip()
+            if not url or not reason or not attempted_at:
+                raise ValidationError("source_attempt requires url, reason and attempted_at")
+            key = hashlib.sha256(
+                repr(("attempt", workspace_id, source_type, url, method, outcome)).encode("utf-8")
+            ).hexdigest()
+            record = SourceAttempt(
+                id=f"attempt_{key[:32]}",
+                workspace_id=workspace_id,
+                brand_id=brand_id,
+                source="host_agent",
+                status=outcome.upper(),
+                lineage=[item for item in [research_run_id] if item],
+                research_run_id=research_run_id,
+                source_type=source_type,
+                url=url,
+                method=method,
+                outcome=outcome,
+                reason=reason,
+                attempted_at=attempted_at,
+            )
+            self.store.save(record)
+            saved.append(record.to_dict())
+        return {"attempts": saved, "count": len(saved)}
+
+    def list_source_attempts(
+        self, *, workspace_id: str, research_run_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        workspace_id = self._workspace(workspace_id)
+        if research_run_id:
+            rows = self._run_attempts(workspace_id=workspace_id, run_id=research_run_id)
+        else:
+            rows = [
+                item
+                for item in self.store.list(workspace_id=workspace_id, object_type="source_attempt")
+                if isinstance(item, SourceAttempt)
+            ]
+        return [item.to_dict() for item in rows]
+
     # --------------------------------------------- topical entities / analysis
 
     def record_topical_entities(
@@ -2362,6 +2445,15 @@ class TopicPlannerService:
             if isinstance(item, SourceObservation)
         ]
 
+    def _run_attempts(self, *, workspace_id: str, run_id: str) -> list[SourceAttempt]:
+        return [
+            item
+            for item in self.store.list(
+                workspace_id=workspace_id, object_type="source_attempt", lineage_contains=run_id
+            )
+            if isinstance(item, SourceAttempt)
+        ]
+
     def _cluster_readiness(
         self,
         *,
@@ -2369,14 +2461,15 @@ class TopicPlannerService:
         run: ResearchRun,
         observations: list[SourceObservation] | None = None,
     ) -> dict[str, Any]:
-        """Report whether the relevance-based research gate is satisfied.
+        """Report whether the external-research gate is satisfied.
 
-        The gate no longer mandates a specific platform.  It requires the
-        rendered SERP to have been read (at least one ``serp_result``
-        observation) and at least one non-SERP evidence family that fits the
-        topic (community, technical, business, brand or competitor).  Covering
-        every family is not expected; a run with one relevant family is
-        ``degraded`` but still ready.
+        The gate requires the rendered SERP to have been read (at least one
+        ``serp_result`` observation) and at least one *external* evidence family
+        the host agent actually read: ``community``, ``technical``, ``business``
+        or ``competitor``.  The first-party ``brand`` family (the brand's own
+        site, accounts or profiles) never satisfies the requirement on its own.
+        Covering two or more external families is ``FULL_COVERAGE``; one is
+        ``DEGRADED_MINIMUM``; none blocks the cluster.
         """
         rows = (
             observations
@@ -2386,8 +2479,20 @@ class TopicPlannerService:
         counts, community = self._observation_counts(rows)
         covered = [family for family in EVIDENCE_FAMILIES if counts[family] > 0]
         missing = [family for family in EVIDENCE_FAMILIES if counts[family] == 0]
+        external_covered = [family for family in EXTERNAL_EVIDENCE_FAMILIES if counts[family] > 0]
+        external_missing = [family for family in EXTERNAL_EVIDENCE_FAMILIES if counts[family] == 0]
         serp_read = counts["serp"] > 0
-        ready = serp_read and bool(covered)
+        ready = serp_read and bool(external_covered)
+        if not serp_read:
+            gate_status = "BLOCKED_NO_SERP"
+        elif not external_covered:
+            gate_status = "BLOCKED_NO_EXTERNAL"
+        elif len(external_covered) >= 2:
+            gate_status = "FULL_COVERAGE"
+        else:
+            gate_status = "DEGRADED_MINIMUM"
+        attempts = self._run_attempts(workspace_id=workspace_id, run_id=run.id)
+        blocked_attempts = [attempt for attempt in attempts if attempt.outcome != "not_available"]
         return {
             "research_run_id": run.id,
             "serp_read": serp_read,
@@ -2395,11 +2500,16 @@ class TopicPlannerService:
             "evidence_families": {family: counts[family] for family in EVIDENCE_FAMILIES},
             "families_covered": covered,
             "families_missing": missing,
+            "external_families_covered": external_covered,
+            "external_families_missing": external_missing,
             "community_counts": {family: community[family] for family in COMMUNITY_SOURCE_FAMILIES},
             "community_families_covered": [f for f in COMMUNITY_SOURCE_FAMILIES if community[f] > 0],
             "community_families_missing": [f for f in COMMUNITY_SOURCE_FAMILIES if community[f] == 0],
-            "required": {"serp_read": serp_read, "relevant_source_evidence": bool(covered)},
-            "degraded": bool(ready and len(covered) < 2),
+            "gate_status": gate_status,
+            "attempts": [attempt.to_dict() for attempt in attempts],
+            "blocked_attempts": [attempt.to_dict() for attempt in blocked_attempts],
+            "required": {"serp_read": serp_read, "external_source_evidence": bool(external_covered)},
+            "degraded": bool(ready and len(external_covered) < 2),
             "ready": ready,
         }
 
@@ -2795,9 +2905,11 @@ class TopicPlannerService:
     def create_content_cluster(self, *, workspace_id: str, opportunity_id: str) -> dict[str, Any]:
         """Turn one selected CREATE opportunity into an evidence-backed cluster.
 
-        The relevance gate is enforced here, not just in the prompt: the
-        rendered SERP must have been read and at least one non-SERP evidence
-        family relevant to the topic recorded.  The pillar is the selected
+        The external-research gate is enforced here, not just in the prompt: the
+        rendered SERP must have been read and at least one external evidence
+        family (community, technical, business or competitor) recorded; the
+        first-party ``brand`` family does not satisfy the requirement.  The
+        pillar is the selected
         opportunity; supporting pages come from sibling opportunities and the
         pillar SERP's PAA / related searches.  The cluster includes only the
         pages the evidence justifies, so it does not have to contain a BOFU page.
@@ -2829,10 +2941,18 @@ class TopicPlannerService:
                 "read the rendered SERP and record at least one serp_result observation before "
                 "creating a content cluster"
             )
-        if not readiness["families_covered"]:
+        if not readiness["external_families_covered"]:
+            blocked = readiness.get("blocked_attempts") or []
+            detail = ""
+            if blocked:
+                detail = " Blocked sources: " + "; ".join(
+                    f"{item.get('source_type')} {item.get('url')} ({item.get('reason')})"
+                    for item in blocked[:5]
+                )
             raise StateError(
-                "research at least one relevant non-SERP source (community, technical, business, "
-                "brand or competitor) and record its viewpoint before creating a content cluster"
+                "research at least one external third-party source (community, technical, business "
+                "or competitor) and record its viewpoint before creating a content cluster; the "
+                "brand's own site does not satisfy this gate." + detail
             )
 
         candidates = self._cluster_candidates(workspace_id=workspace_id, run=run, pillar=opportunity)

@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "seo-topic-planner",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Decide which SEO content opportunities are worth pursuing, with visible cost controls and traceable evidence.",
   "author": {
     "name": "SEO Writer contributors"

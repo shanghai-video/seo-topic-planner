@@ -124,6 +124,21 @@ COMMUNITY_SOURCE_FAMILIES: dict[str, set[str]] = {
     "youtube": {"youtube_video", "youtube_transcript"},
 }
 
+# The mandatory external-research requirement is met only by third-party
+# families the host agent actually read.  ``brand`` is first-party (the brand's
+# own site, accounts and profiles), so reading only the brand's own property no
+# longer satisfies the gate: at least one ``community``, ``technical``,
+# ``business`` or ``competitor`` source is required before a plan is built.
+EXTERNAL_EVIDENCE_FAMILIES = ("community", "technical", "business", "competitor")
+
+# Read methods the host agent may report for an external source it tried.  The
+# fallback order is browser -> HTTP -> Jina Reader -> yt-dlp (YouTube).
+SOURCE_ATTEMPT_METHODS = {"browser", "http", "jina", "yt-dlp", "other"}
+
+# Outcomes for an attempted-but-unreadable source.  A blocked attempt is a
+# visible, honest gap; it never counts as research evidence.
+SOURCE_ATTEMPT_OUTCOMES = {"blocked", "not_available", "gated"}
+
 # A rendered-SERP observation proves the host agent actually read the SERP.
 SERP_SOURCE_TYPES = {"serp_result"}
 
@@ -476,6 +491,42 @@ class SourceObservation(Record):
 
 
 @dataclass
+class SourceAttempt(Record):
+    """A host-agent record of an external source it tried but could not read.
+
+    The research gate requires at least one third-party family.  When a source
+    cannot be reached (a blocked browser session, a 403, an unavailable host
+    tool), the host agent records the attempt and the reason here instead of
+    silently passing the gate or fabricating an observation.  A blocked attempt
+    is an honest, visible gap; it never counts as research evidence.
+    """
+
+    object_type: ClassVar[str] = "source_attempt"
+    research_run_id: str | None = None
+    source_type: str = ""
+    url: str = ""
+    method: str = "browser"
+    outcome: str = "blocked"
+    reason: str = ""
+    attempted_at: str = ""
+
+    def validate(self) -> None:
+        self.validate_base()
+        if self.source_type not in OBSERVATION_SOURCE_TYPES:
+            raise ValidationError("unsupported source_attempt source type")
+        if not self.url.strip():
+            raise ValidationError("source_attempt requires a url")
+        if self.method not in SOURCE_ATTEMPT_METHODS:
+            raise ValidationError("unsupported source_attempt method")
+        if self.outcome not in SOURCE_ATTEMPT_OUTCOMES:
+            raise ValidationError("unsupported source_attempt outcome")
+        if not self.reason.strip():
+            raise ValidationError("source_attempt requires a reason")
+        if not self.attempted_at.strip():
+            raise ValidationError("source_attempt requires attempted_at")
+
+
+@dataclass
 class ResearchEvidencePack(Record):
     object_type: ClassVar[str] = "research_evidence_pack"
     research_run_id: str = ""
@@ -760,6 +811,7 @@ RECORD_TYPES: dict[str, type[Record]] = {
         ResearchRun,
         ResearchEvidence,
         SourceObservation,
+        SourceAttempt,
         ResearchEvidencePack,
         TopicOpportunity,
         TopicDecision,

@@ -67,22 +67,32 @@ specific brand. Treat keyword metrics as evidence, not as the answer.
    their readiness, evidence readiness, missing evidence, AI-overview
    saturation, recommended angle, confidence, and supporting evidence IDs.
 8. Research the topic with sources that fit it, then record what you read. This
-   is a required gate, not optional enrichment. Call `get_cluster_readiness`
-   before creating a content plan.
+   is a required gate, not optional enrichment: you must actually read at least
+   one external third-party source. Call `get_cluster_readiness` before creating
+   a content plan; `create_content_cluster` refuses until an external family is
+   covered.
    - Read the rendered SERP first and record at least one `serp_result`
      observation (organic results, AI overview, PAA, related searches).
-   - Then research at least one additional evidence family that fits the topic:
-     community (Reddit threads, YouTube videos/transcripts), technical (official
-     documentation, GitHub issues, technical articles), business (product docs,
-     industry analysis, case studies, third-party reviews), brand (company
-     profiles, official accounts, the brand site) or competitor pages. Choose by
-     the subject; a B2C topic may need community sources while a technical topic
-     may need documentation and issues. Podcasts are out of scope.
+   - Then read at least one *external* third-party source: community, technical,
+     business or competitor. The brand's own site (`brand_website`), company
+     profiles and official accounts are first-party and do NOT satisfy the gate;
+     reading only your own pages still blocks the plan. Choose the family by the
+     subject; podcasts are out of scope.
+   - Use the read method that fits the source, falling back in this order:
+     browser / Computer Use first, then a direct HTTP fetch, then Jina Reader.
+     For YouTube use `yt-dlp` (search with `ytsearchN:<query>`; pull subtitles
+     with `--skip-download --write-auto-subs`). Reddit is often blocked (403) to
+     plain HTTP, so read it in the browser or switch to another accessible
+     community source (Quora, G2/Capterra, Hacker News, a professional forum,
+     YouTube comments).
    - Record observations through `record_source_observations`, passing the
      `research_run_id`, a source type, a short viewpoint and 1-3 supporting
-     quotes, plus optional credibility, relevance and research_purpose. Do not
-     force a platform that does not fit; explain any family you did not use.
-     Never submit full page bodies, transcripts, usernames, or comment text.
+     quotes, plus optional credibility, relevance and research_purpose. Never
+     submit full page bodies, transcripts, usernames, or comment text.
+   - When a source cannot be reached, record it with `record_source_attempts`
+     (source type, url, method, outcome, reason, attempted_at) instead of
+     silently skipping it. An attempt is a visible gap: it never counts as
+     evidence and never satisfies the gate.
    - Report your own site coverage through `record_site_pages`.
 9. Map the topic's entities and their relationships from the evidence and write
    them back with `record_topical_entities` (types such as Product, Capability,
@@ -124,9 +134,11 @@ specific brand. Treat keyword metrics as evidence, not as the answer.
 - Explain score components transparently. A high score is a decision aid, not a
   statistically precise forecast.
 - Do not create a plan until the rendered SERP has been read and at least one
-  relevant non-SERP evidence family has been recorded. The server refuses
-  `create_content_cluster` otherwise; never fabricate observations to work
-  around the gate.
+  external third-party family (community, technical, business or competitor) has
+  been recorded. The server refuses `create_content_cluster` otherwise, the
+  brand's own site does not satisfy the gate, and a blocked source must be
+  recorded as an attempt rather than invented. Never fabricate observations or
+  attempts to work around the gate.
 - SERP structural diversity is not evidence that competition is weak or that the
   brand can add value. Information gain must come from real data, first-hand
   experience, technical depth, a decision framework or a novel insight, each
@@ -148,8 +160,8 @@ The current analysis emits CREATE and IGNORE; other decision types remain
 candidate suggestions pending GSC-informed analysis.
 
 When the user creates content, present the whole plan: the pillar page first,
-then the supporting pages, with the funnel distribution, the evidence families
-covered, and each page's `content_status`
+then the supporting pages, with the funnel distribution, the external evidence
+families covered, any blocked source attempts, and each page's `content_status`
 (`READY_TO_BRIEF` / `NEEDS_RESEARCH` / `NEEDS_BRAND_EVIDENCE` / `LOW_VALUE`).
 `READY_TO_BRIEF` means the planning is trustworthy enough to brief; it does not
 mean the article is ready to publish.

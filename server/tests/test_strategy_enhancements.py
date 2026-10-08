@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from seo_topic_planner.errors import AuthError, NotFoundError, StateError
+from seo_topic_planner.errors import AuthError, NotFoundError, StateError, ValidationError
 from seo_topic_planner.models import BrandProfile, SourceObservation
 from seo_topic_planner.providers import FakeSeoProvider
 from seo_topic_planner.service import TopicPlannerService
@@ -530,6 +530,116 @@ class StrategyEnhancementTest(unittest.TestCase):
         self.assertEqual(readiness["community_families_covered"], [])
         cluster = self.service.create_content_cluster(workspace_id="w", opportunity_id=selected["id"])
         self.assertTrue(cluster["topic_cluster"]["items"])
+
+    def test_20a_brand_only_evidence_does_not_satisfy_the_gate(self):
+        _, brand_id = self._confirmed()
+        result = self._run(brand_id)
+        run_id = result["research_run"]["id"]
+        selected = next(row for row in result["opportunities"] if row["decision_type"] == "CREATE")
+        self._gate(
+            run_id,
+            [
+                {
+                    "source_type": "serp_result",
+                    "url": "https://google.test/s",
+                    "fetched_at": "2026-10-07T00:00:00Z",
+                    "quotes": ["q"],
+                    "viewpoint": "serp read",
+                },
+                {
+                    "source_type": "brand_website",
+                    "url": "https://acme.test/blog/agents",
+                    "fetched_at": "2026-10-07T00:00:00Z",
+                    "quotes": ["Our enterprise deployment guide"],
+                    "viewpoint": "The brand's own site already covers deployment.",
+                },
+            ],
+        )
+        readiness = self.service.get_cluster_readiness(workspace_id="w", research_run_id=run_id)
+        self.assertFalse(readiness["ready"])
+        self.assertEqual(readiness["gate_status"], "BLOCKED_NO_EXTERNAL")
+        self.assertEqual(readiness["families_covered"], ["brand"])
+        self.assertEqual(readiness["external_families_covered"], [])
+        with self.assertRaises(StateError):
+            self.service.create_content_cluster(workspace_id="w", opportunity_id=selected["id"])
+
+    def test_20b_blocked_source_attempts_are_visible_and_do_not_satisfy_the_gate(self):
+        _, brand_id = self._confirmed()
+        result = self._run(brand_id)
+        run_id = result["research_run"]["id"]
+        selected = next(row for row in result["opportunities"] if row["decision_type"] == "CREATE")
+        self._gate(
+            run_id,
+            [
+                {
+                    "source_type": "serp_result",
+                    "url": "https://google.test/s",
+                    "fetched_at": "2026-10-07T00:00:00Z",
+                    "quotes": ["q"],
+                    "viewpoint": "serp read",
+                }
+            ],
+        )
+        attempt = {
+            "source_type": "reddit_thread",
+            "url": "https://www.reddit.com/r/SEO/",
+            "method": "http",
+            "outcome": "blocked",
+            "reason": "HTTP 403 from Reddit network security",
+            "attempted_at": "2026-10-07T00:00:00Z",
+        }
+        stored = self.service.record_source_attempts(
+            workspace_id="w", research_run_id=run_id, attempts=[attempt]
+        )
+        self.assertEqual(stored["count"], 1)
+        # Re-submitting the same attempt is idempotent.
+        again = self.service.record_source_attempts(
+            workspace_id="w", research_run_id=run_id, attempts=[attempt]
+        )
+        self.assertEqual(again["attempts"][0]["id"], stored["attempts"][0]["id"])
+
+        readiness = self.service.get_cluster_readiness(workspace_id="w", research_run_id=run_id)
+        self.assertFalse(readiness["ready"])
+        self.assertEqual(readiness["gate_status"], "BLOCKED_NO_EXTERNAL")
+        self.assertEqual(len(readiness["attempts"]), 1)
+        self.assertEqual(len(readiness["blocked_attempts"]), 1)
+        with self.assertRaises(StateError):
+            self.service.create_content_cluster(workspace_id="w", opportunity_id=selected["id"])
+
+    def test_20c_source_attempt_validation(self):
+        _, brand_id = self._confirmed()
+        result = self._run(brand_id)
+        run_id = result["research_run"]["id"]
+        with self.assertRaises(ValidationError):
+            self.service.record_source_attempts(
+                workspace_id="w",
+                research_run_id=run_id,
+                attempts=[
+                    {
+                        "source_type": "reddit_thread",
+                        "url": "https://www.reddit.com/r/SEO/",
+                        "method": "carrier-pigeon",
+                        "outcome": "blocked",
+                        "reason": "x",
+                        "attempted_at": "2026-10-07T00:00:00Z",
+                    }
+                ],
+            )
+        with self.assertRaises(ValidationError):
+            self.service.record_source_attempts(
+                workspace_id="w",
+                research_run_id=run_id,
+                attempts=[
+                    {
+                        "source_type": "reddit_thread",
+                        "url": "",
+                        "method": "http",
+                        "outcome": "blocked",
+                        "reason": "",
+                        "attempted_at": "",
+                    }
+                ],
+            )
 
     # ---------------------------------------------------------------- regression
 

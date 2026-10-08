@@ -454,6 +454,34 @@ TOOLS: list[dict[str, Any]] = [
         open_world=False,
     ),
     _tool(
+        "record_source_attempts",
+        "Record external sources the host agent tried but could not read (a blocked browser session, "
+        "a 403, an unavailable tool). Each attempt needs a source type, url, read method "
+        "(browser|http|jina|yt-dlp|other), outcome (blocked|not_available|gated), a reason and "
+        "attempted_at. Attempts are honest, visible gaps and never count as research evidence; they "
+        "are reported by get_cluster_readiness and by the create_content_cluster refusal. "
+        "Idempotent.",
+        {
+            "workspace_id": STRING,
+            "research_run_id": {"type": "string"},
+            "attempts": {"type": "array", "items": {"type": "object"}},
+        },
+        ["workspace_id", "attempts"],
+        title="Record source attempts",
+        read_only=False,
+        open_world=False,
+        idempotent=True,
+    ),
+    _tool(
+        "list_source_attempts",
+        "List the external sources the host agent tried but could not read for a workspace or run.",
+        {"workspace_id": STRING, "research_run_id": {"type": "string"}},
+        ["workspace_id"],
+        title="List source attempts",
+        read_only=True,
+        open_world=False,
+    ),
+    _tool(
         "record_topical_entities",
         "Write back the topic entities and their relationships the host agent found for a research "
         "run. Entities are idempotent by canonical name; relations reference entities by name and "
@@ -534,9 +562,10 @@ TOOLS: list[dict[str, Any]] = [
         "create_content_cluster",
         "Record the user's selected CREATE opportunity and build an evidence-backed content cluster: "
         "one pillar page plus only the supporting pages the research justifies. Gated server-side: "
-        "the rendered SERP must be read and at least one relevant non-SERP evidence family "
-        "(community, technical, business, brand or competitor) recorded first. The funnel is "
-        "descriptive, not a mandate, so a cluster need not contain a BOFU page. No new research calls occur.",
+        "the rendered SERP must be read and at least one external third-party evidence family "
+        "(community, technical, business or competitor) recorded first; the brand's own site does "
+        "not satisfy this gate. The funnel is descriptive, not a mandate, so a cluster need not "
+        "contain a BOFU page. No new research calls occur.",
         {"workspace_id": STRING, "opportunity_id": STRING},
         ["workspace_id", "opportunity_id"],
         title="Create content cluster",
@@ -545,9 +574,11 @@ TOOLS: list[dict[str, Any]] = [
     ),
     _tool(
         "get_cluster_readiness",
-        "Report whether a research run has met the relevance-based cluster gate: SERP read and which "
-        "evidence families are covered (community, technical, business, brand, competitor). Use it "
-        "before create_content_cluster.",
+        "Report whether a research run has met the external-research gate: SERP read and at least one "
+        "external third-party family (community, technical, business, competitor) covered. Returns "
+        "the gate_status (BLOCKED_NO_SERP | BLOCKED_NO_EXTERNAL | DEGRADED_MINIMUM | FULL_COVERAGE), "
+        "which families are missing, and any blocked source attempts. Use it before "
+        "create_content_cluster.",
         {"workspace_id": STRING, "research_run_id": STRING},
         ["workspace_id", "research_run_id"],
         title="Get cluster readiness",
@@ -637,6 +668,8 @@ def _dispatch(service: TopicPlannerService, name: str, arguments: dict[str, Any]
         "record_site_pages": service.record_site_pages,
         "record_source_observations": service.record_source_observations,
         "list_source_observations": service.list_source_observations,
+        "record_source_attempts": service.record_source_attempts,
+        "list_source_attempts": service.list_source_attempts,
         "get_cluster_readiness": service.get_cluster_readiness,
         "open_connection_settings": lambda workspace_id="settings": service.get_data_provider_status(
             workspace_id=workspace_id

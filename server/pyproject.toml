@@ -1,6 +1,6 @@
 [project]
 name = "seo-topic-planner-local-core"
-version = "0.6.0"
+version = "0.7.0"
 description = "Local MCP Core for the SEO Topic Planner plugin"
 requires-python = ">=3.9"
 

@@ -110,14 +110,21 @@ runtime refuses research rather than returning sample data.
 
 ## Research gate and content clusters
 
-The research gate is relevance-based, not platform-based. It is enforced
+The research gate is external-evidence-based, not platform-based. It is enforced
 server-side:
 
 - `create_content_cluster` refuses unless the run has at least one `serp_result`
-  observation and at least one non-SERP evidence family (community, technical,
-  business, brand or competitor). One family satisfies the minimum; two or more
-  is reported as fuller coverage. `get_cluster_readiness` reports the exact state
-  and the community families reached.
+  observation and at least one **external third-party** family the host agent
+  actually read: community, technical, business or competitor. The first-party
+  `brand` family (the brand's own site, accounts and profiles) never satisfies
+  the minimum on its own. One external family is `DEGRADED_MINIMUM`; two or more
+  is `FULL_COVERAGE`. `get_cluster_readiness` reports the exact `gate_status`
+  (`BLOCKED_NO_SERP` / `BLOCKED_NO_EXTERNAL` / `DEGRADED_MINIMUM` /
+  `FULL_COVERAGE`), the families reached and any blocked source attempts.
+- A source the host agent cannot read is recorded through
+  `record_source_attempts` with a method, an outcome and a reason. Attempts stay
+  visible (in `get_cluster_readiness` and in the cluster refusal) but never count
+  as evidence, so a blocked run cannot silently pass and nothing is fabricated.
 - The output is an evidence-backed plan, not a single topic: one pillar page plus
   only the supporting pages the evidence justifies, drawn from sibling
   opportunities and the pillar SERP's PAA and related searches. The funnel is
@@ -147,7 +154,10 @@ Server-side LLM summarization, the Reddit API, full site audits, GSC sync,
 article drafting, CMS publishing, generic browser scraping, and public account
 upload are separate products or explicit future work.
 
-Community research (Reddit threads and YouTube videos/transcripts) is collected
-by the host agent through browser / Computer Use / yt-dlp and written back as
-citations; the plugin never calls those platforms' APIs itself and never stores
-their full content. Podcasts are out of scope.
+External research is collected by the host agent, not by the plugin: browser /
+Computer Use first, then a direct HTTP fetch, then Jina Reader, and `yt-dlp` for
+YouTube (search plus subtitles). Reddit is often blocked to plain HTTP, so it is
+read in the browser or replaced with another accessible community source. What
+the host agent actually read is written back as short cited observations; the
+plugin never calls those platforms' APIs itself and never stores their full
+content. Podcasts are out of scope.
