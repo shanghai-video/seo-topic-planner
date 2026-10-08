@@ -32,11 +32,11 @@
       <section id="existing"></section>
       <section id="suggested"></section>
 
+      <div class="status" id="status">Ready.</div>
       <div class="actions">
         <button id="confirm" type="button">Confirm entities</button>
         <button class="secondary" id="reload" type="button">Reload</button>
       </div>
-      <div class="status" id="status">Ready.</div>
     </main>
 
     <script>
@@ -67,6 +67,15 @@
       }
       async function call(name, args) {
         return structured(await window.openai?.callTool?.(name, args || {}));
+      }
+
+      // A failed tool call returns ``{error}`` in structuredContent rather than
+      // throwing. Surface it so a failure is diagnosable instead of silently
+      // turning into "confirmed 0 entities".
+      async function callOrThrow(name, args) {
+        const result = await call(name, args);
+        if (result && result.error) throw new Error(String(result.error));
+        return result;
       }
       async function openCard(args) {
         return structured(await window.openai?.callTool?.('open_brand_entity_card', args || {}));
@@ -128,14 +137,39 @@
         }
       }
 
+      // Re-fetch the card from the plugin so a card that sat through later
+      // conversation turns still confirms against the current brand context.
+      // Entity suggestions only exist in the payload the host passed when it
+      // opened the card, so keep them unless the caller clears them.
+      async function reloadCard(preserveSuggestions) {
+        const previous = (data && data.suggested_entities) || [];
+        const args = { workspace_id: (data && data.workspace_id) || 'settings' };
+        if (data && data.brand_id) args.brand_id = data.brand_id;
+        if (data && data.website) args.website = data.website;
+        const fresh = await openCard(args);
+        if (fresh && (fresh.suggested_entities || fresh.entities)) {
+          const freshSuggestions = fresh.suggested_entities || [];
+          const suggested =
+            preserveSuggestions !== false && !freshSuggestions.length ? previous : freshSuggestions;
+          data = { ...fresh, suggested_entities: suggested };
+          render();
+        }
+        return data;
+      }
+
       async function confirmAll() {
-        if (!data) return;
         els.confirm.disabled = true;
         els.status.textContent = 'Saving entities\u2026';
         try {
+          await reloadCard();
+          if (!data || !data.brand_id) {
+            throw new Error(
+              'no confirmed brand context for this website yet; confirm the brand context first'
+            );
+          }
           const created = [];
           for (const entity of data.suggested_entities || []) {
-            const result = await call('create_brand_entity', {
+            const result = await callOrThrow('create_brand_entity', {
               workspace_id: data.workspace_id,
               brand_id: data.brand_id,
               canonical_name: entity.canonical_name,
@@ -146,16 +180,19 @@
             if (result.brand_entity) created.push(result.brand_entity);
           }
           for (const entity of created) {
-            await call('confirm_brand_entity', {
+            await callOrThrow('confirm_brand_entity', {
               workspace_id: data.workspace_id,
               entity_id: entity.id,
             });
           }
           els.status.textContent = `Confirmed ${created.length} entity(ies).`;
-          data = await openCard({ workspace_id: data.workspace_id, brand_id: data.brand_id });
-          render();
+          await reloadCard(false);
         } catch (error) {
-          els.status.textContent = 'Could not confirm the entities. Please try again.';
+          els.status.textContent =
+            'Could not confirm the entities: ' +
+            (error && error.message
+              ? error.message
+              : 'reopen the card from the agent and try again.');
         } finally {
           els.confirm.disabled = false;
         }
@@ -164,8 +201,7 @@
       els.confirm.addEventListener('click', confirmAll);
       els.reload.addEventListener('click', async () => {
         if (!data) return;
-        data = await openCard({ workspace_id: data.workspace_id, brand_id: data.brand_id });
-        render();
+        await reloadCard();
       });
       window.addEventListener('message', (event) => {
         const incoming = event.data;

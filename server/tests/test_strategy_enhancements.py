@@ -207,6 +207,21 @@ class StrategyEnhancementTest(unittest.TestCase):
         all_brand_entity_ids = {item for row in opportunities for item in row["brand_entity_ids"]}
         self.assertIn(created["brand_entity"]["id"], all_brand_entity_ids)
 
+    def test_7b_entity_card_resolves_the_only_brand_without_explicit_ids(self):
+        created, brand_id = self._confirmed()
+        card = self.service.brand_entity_card(
+            workspace_id="w",
+            suggestions={
+                "entities": [
+                    {"entity_type": "organization", "canonical_name": "Acme Inc."},
+                    {"entity_type": "product", "canonical_name": "Acme Agents"},
+                ]
+            },
+        )
+        self.assertEqual(card["brand_id"], brand_id)
+        self.assertEqual(card["website"], "https://acme.test")
+        self.assertEqual(len(card["suggested_entities"]), 2)
+
     # ---------------------------------------------------------- semantic coverage
 
     def test_8_synonym_different_words_same_intent_can_be_marked_covered(self):

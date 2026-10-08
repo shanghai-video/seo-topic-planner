@@ -893,6 +893,13 @@ class TopicPlannerService:
             profile = self.store.get(brand_id, workspace_id=workspace_id, object_type="brand_profile")
         elif website:
             profile = self.store.find_brand_by_website(workspace_id=workspace_id, website=website)
+        if profile is None and not brand_id and not website:
+            # The card can be opened with only a workspace id.  When the
+            # workspace holds exactly one brand, resolve it so the user can
+            # still confirm entities instead of hitting an unresolvable card.
+            brands = self.store.list(workspace_id=workspace_id, object_type="brand_profile")
+            if len(brands) == 1:
+                profile = brands[0]
         entities: list[BrandEntity] = (
             self._brand_entities(workspace_id=workspace_id, brand_id=profile.id)
             if isinstance(profile, BrandProfile)
