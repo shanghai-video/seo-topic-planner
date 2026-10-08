@@ -101,22 +101,22 @@
         </section>
       </div>
 
-      <div class="actions">
-        <button id="save" type="button">Confirm brand context</button>
-        <button class="secondary" id="reset" type="button">Reset</button>
-      </div>
-
       <section class="card" aria-live="polite">
         <div>Status</div>
         <div id="status" class="status">Ready.</div>
       </section>
+
+      <div class="actions">
+        <button id="save" type="button">Confirm brand context</button>
+        <button class="secondary" id="reset" type="button">Reset</button>
+      </div>
     </main>
 
     <script>
       let workspaceId = 'settings';
       const state = {
         data: null,
-        selectedMarket: "",
+        selectedMarkets: [],
         selectedLanguage: "",
         features: [],
       };
@@ -188,7 +188,7 @@
             { value: 'Japan', label: 'Japan' },
           ];
         }
-        return withCandidate(options, 'target_market');
+        return withCandidate(options, 'target_market', 'target_markets');
       }
       function languageOptions() {
         let options;
@@ -208,11 +208,17 @@
       }
       // A scrape candidate is offered as an unselected option. It is never
       // auto-selected: the user must choose the market and language.
-      function withCandidate(options, field) {
+      function withCandidate(options, field, listField) {
         const suggestion = (state.data && state.data.suggestions) || {};
-        const candidate = String(suggestion[field] || '').trim();
-        if (candidate && !options.some((item) => item.value === candidate)) {
-          return [{ value: candidate, label: `${candidate} (suggested)` }, ...options];
+        const candidates = [];
+        if (listField && Array.isArray(suggestion[listField])) {
+          for (const value of suggestion[listField]) candidates.push(String(value || '').trim());
+        }
+        candidates.push(String(suggestion[field] || '').trim());
+        for (const candidate of candidates) {
+          if (candidate && !options.some((item) => item.value === candidate)) {
+            options = [{ value: candidate, label: `${candidate} (suggested)` }, ...options];
+          }
         }
         return options;
       }
@@ -229,20 +235,24 @@
 
       function renderMarket() {
         const options = marketOptions();
-        if (state.selectedMarket && !options.some((item) => item.value === state.selectedMarket)) {
-          options.push({ value: state.selectedMarket, label: state.selectedMarket });
+        for (const value of state.selectedMarkets) {
+          if (!options.some((item) => item.value === value)) {
+            options.push({ value, label: value });
+          }
         }
         els.marketChips.replaceChildren(
           ...options.map((item) =>
-            chip(item.label, state.selectedMarket === item.value, () => {
-              state.selectedMarket = item.value;
+            chip(item.label, state.selectedMarkets.includes(item.value), () => {
+              state.selectedMarkets = state.selectedMarkets.includes(item.value)
+                ? state.selectedMarkets.filter((value) => value !== item.value)
+                : [...state.selectedMarkets, item.value];
               renderMarket();
             })
           )
         );
-        els.marketValue.textContent = state.selectedMarket
-          ? `Selected market: ${state.selectedMarket}`
-          : 'No market selected yet. Pick one above (a scan suggestion is marked "suggested").';
+        els.marketValue.textContent = state.selectedMarkets.length
+          ? `Selected markets: ${state.selectedMarkets.join(', ')}`
+          : 'No market selected yet. Pick one or more above (a scan suggestion is marked "suggested").';
       }
 
       function renderLanguage() {
@@ -289,7 +299,9 @@
       }
       els.marketAdd.addEventListener('click', () =>
         addCustom(els.marketCustom, (value) => {
-          state.selectedMarket = value;
+          if (!state.selectedMarkets.includes(value)) {
+            state.selectedMarkets = [...state.selectedMarkets, value];
+          }
           renderMarket();
         })
       );
@@ -323,7 +335,10 @@
         const review = Boolean(data.found || data.mode === 'review');
         // Only a remembered, previously-confirmed context is pre-selected.
         // A first-run scrape suggestion stays an unselected candidate.
-        state.selectedMarket = review ? suggestedMarket : '';
+        const remembered = Array.isArray(suggestion.target_markets) ? suggestion.target_markets : [];
+        state.selectedMarkets = review
+          ? (remembered.length ? [...remembered] : (suggestedMarket ? [suggestedMarket] : []))
+          : [];
         state.selectedLanguage = review ? suggestedLanguage : '';
         state.features = Array.isArray(suggestion.core_features) ? [...suggestion.core_features] : [];
         els.mode.textContent = review ? 'Remembered context' : 'First run';
@@ -339,7 +354,7 @@
         const name = els.name.value.trim();
         const missing = [];
         if (!name) missing.push('working name');
-        if (!state.selectedMarket) missing.push('target market');
+        if (!state.selectedMarkets.length) missing.push('target market');
         if (!state.selectedLanguage) missing.push('language');
         if (!state.features.length) missing.push('core features');
         const labelled = [
@@ -366,7 +381,8 @@
             website,
             product: els.mainBusiness.value.trim(),
             target_customer: els.targetCustomer.value.trim(),
-            target_market: state.selectedMarket,
+            target_market: state.selectedMarkets[0],
+            target_markets: state.selectedMarkets,
             language: state.selectedLanguage,
             positioning: els.positioning.value.trim(),
             primary_scenario: els.primaryScenario.value.trim(),
@@ -379,7 +395,8 @@
           await call('confirm_brand_context', {
             workspace_id: workspaceId,
             brand_id: brandId,
-            target_market: state.selectedMarket,
+            target_market: state.selectedMarkets[0],
+            target_markets: state.selectedMarkets,
             language: state.selectedLanguage,
             target_customer: els.targetCustomer.value.trim(),
             positioning: els.positioning.value.trim(),
@@ -387,7 +404,7 @@
             main_business: els.mainBusiness.value.trim(),
             core_features: state.features,
           });
-          setStatus('Brand context confirmed: ' + state.selectedMarket + ' / ' + state.selectedLanguage + '.');
+          setStatus('Brand context confirmed: ' + state.selectedMarkets.join(', ') + ' / ' + state.selectedLanguage + '.');
         } catch (error) {
           setStatus('Could not confirm the brand context. Please try again.');
         } finally {

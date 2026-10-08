@@ -294,6 +294,7 @@ class TopicPlannerService:
         product: str = "",
         target_customer: str = "",
         target_market: str = "",
+        target_markets: list[str] | None = None,
         language: str = "",
         positioning: str = "",
         primary_scenario: str = "",
@@ -309,6 +310,12 @@ class TopicPlannerService:
         if not all(isinstance(value, str) and value.strip() for value in (name, website)):
             raise ValidationError("name and website are required")
         features = self._features(core_features)
+        markets = self._clean_markets(target_markets)
+        primary_market = target_market.strip()
+        if primary_market:
+            markets = [primary_market] + [market for market in markets if market != primary_market]
+        elif markets:
+            primary_market = markets[0]
         existing = self.store.find_brand_by_website(workspace_id=workspace_id, website=website)
         if existing is not None and not update_existing:
             snapshot = self._latest_snapshot(workspace_id, existing.id)
@@ -327,7 +334,8 @@ class TopicPlannerService:
             existing.website = website.strip()
             existing.product = product.strip()
             existing.target_customer = target_customer.strip()
-            existing.target_market = target_market.strip()
+            existing.target_market = primary_market
+            existing.target_markets = markets
             existing.language = language.strip()
             existing.positioning = positioning.strip()
             existing.primary_scenario = primary_scenario.strip()
@@ -372,7 +380,8 @@ class TopicPlannerService:
             website=website.strip(),
             product=product.strip(),
             target_customer=target_customer.strip(),
-            target_market=target_market.strip(),
+            target_market=primary_market,
+            target_markets=markets,
             language=language.strip(),
             positioning=positioning.strip(),
             primary_scenario=primary_scenario.strip(),
@@ -426,6 +435,7 @@ class TopicPlannerService:
         workspace_id: str,
         brand_id: str,
         target_market: str,
+        target_markets: list[str] | None = None,
         language: str,
         target_customer: str,
         positioning: str,
@@ -440,8 +450,14 @@ class TopicPlannerService:
         """
         workspace_id = self._workspace(workspace_id)
         features = self._features(core_features)
+        markets = self._clean_markets(target_markets)
+        primary_market = target_market.strip()
+        if primary_market:
+            markets = [primary_market] + [market for market in markets if market != primary_market]
+        elif markets:
+            primary_market = markets[0]
         fields = {
-            "target_market": target_market,
+            "target_market": primary_market,
             "language": language,
             "target_customer": target_customer,
             "positioning": positioning,
@@ -455,7 +471,8 @@ class TopicPlannerService:
             raise ValidationError("explicit confirmation requires: " + ", ".join(missing))
         profile = self.store.get(brand_id, workspace_id=workspace_id, object_type="brand_profile")
         assert isinstance(profile, BrandProfile)
-        profile.target_market = target_market.strip()
+        profile.target_market = primary_market
+        profile.target_markets = markets
         profile.language = language.strip()
         profile.target_customer = target_customer.strip()
         profile.positioning = positioning.strip()
@@ -470,6 +487,20 @@ class TopicPlannerService:
         return profile.to_dict()
 
     @staticmethod
+    def _clean_markets(values: object) -> list[str]:
+        """Normalize a market selection into an ordered, de-duplicated list."""
+        if isinstance(values, str):
+            values = [values]
+        if not isinstance(values, (list, tuple)):
+            return []
+        cleaned: list[str] = []
+        for item in values:
+            text = str(item or "").strip()
+            if text and text not in cleaned:
+                cleaned.append(text)
+        return cleaned
+
+    @staticmethod
     def _suggestion(suggestions: dict[str, Any] | None) -> dict[str, Any]:
         """Normalize optional host-agent scrape suggestions into card fields."""
 
@@ -478,11 +509,16 @@ class TopicPlannerService:
         def text(key: str) -> str:
             return str(source.get(key) or "").strip()
 
+        markets = TopicPlannerService._clean_markets(source.get("target_markets"))
+        single_market = text("target_market")
+        if single_market and single_market not in markets:
+            markets = [single_market] + markets
         return {
             "name": text("name"),
             "product": text("product"),
             "target_customer": text("target_customer"),
             "target_market": text("target_market"),
+            "target_markets": markets,
             "language": text("language"),
             "positioning": text("positioning"),
             "primary_scenario": text("primary_scenario"),
@@ -516,6 +552,8 @@ class TopicPlannerService:
                 "product": profile.product,
                 "target_customer": profile.target_customer,
                 "target_market": profile.target_market,
+                "target_markets": list(profile.target_markets)
+                or ([profile.target_market] if profile.target_market else []),
                 "language": profile.language,
                 "positioning": profile.positioning,
                 "primary_scenario": profile.primary_scenario,

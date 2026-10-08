@@ -15,9 +15,9 @@ endpoints.
   topical entity and semantic-coverage write-back, a relevance research gate,
   opportunity/evidence reads, and evidence-backed content clusters.
 - A brand-context MCP App card (`open_brand_context_card`) that asks the user to
-  confirm the target market, language and the product's core features. The empty
-  first-run context is offered as scrape-derived, editable suggestions; market
-  and language are never defaulted by the Planner.
+  confirm the target market(s), language and the product's core features. The
+  empty first-run context is offered as scrape-derived, editable suggestions;
+  market and language are never defaulted by the Planner.
 - A brand-entity MCP App card (`open_brand_entity_card`) that separates
   Organization, Brand, Product and concept entities and records only verified
   external profiles, so a `sameAs` set stays empty until a real URL is confirmed.

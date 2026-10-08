@@ -28,9 +28,9 @@ specific brand. Treat keyword metrics as evidence, not as the answer.
    context may be estimated or researched; a `DRAFT` context blocks both.
    Confirmation normally happens through the brand-context card. When the host
    cannot render the card, ask the same questions and call
-   `confirm_brand_context` with target market, language, ICP, positioning, main
-   business, primary scenario and at least one core feature. A changed or
-   updated context returns to `DRAFT`.
+   `confirm_brand_context` with the target market or markets, language, ICP,
+   positioning, main business, primary scenario and at least one core feature. A
+   changed or updated context returns to `DRAFT`.
 3. Discover the brand's entities before researching topics. Each website can
    involve several objects, so keep them separate:
    - Organization (the legal or operating entity), Brand (the market-facing

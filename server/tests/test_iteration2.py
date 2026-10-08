@@ -237,6 +237,31 @@ class Iteration2Test(unittest.TestCase):
         self.assertEqual(reviewed["suggestions"]["target_market"], CONFIRM["target_market"])
         self.assertEqual(reviewed["suggestions"]["core_features"], CONFIRM["core_features"])
 
+    def test_task_c_multiple_target_markets_keep_a_primary(self):
+        created = self._brand()
+        confirmed = self.service.confirm_brand_context(
+            workspace_id="w",
+            brand_id=created["brand_profile"]["id"],
+            **{**CONFIRM, "target_markets": ["United States", "Germany", "France"]},
+        )
+        self.assertEqual(confirmed["target_market"], "United States")
+        self.assertEqual(confirmed["target_markets"], ["United States", "Germany", "France"])
+        card = self.service.brand_context_card(workspace_id="w", website="acme.test")
+        self.assertEqual(
+            card["suggestions"]["target_markets"], ["United States", "Germany", "France"]
+        )
+
+    def test_task_c_create_accepts_multiple_markets(self):
+        created = self.service.create_brand_profile(
+            workspace_id="w",
+            name="Multi",
+            website="https://multi.test",
+            target_markets=["United States", "Germany"],
+        )
+        profile = created["brand_profile"]
+        self.assertEqual(profile["target_market"], "United States")
+        self.assertEqual(profile["target_markets"], ["United States", "Germany"])
+
     # ---------------------------------------------------------------- task D
 
     def test_task_d_serp_evidence_keeps_aio_paa_and_related(self):

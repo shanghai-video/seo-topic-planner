@@ -298,6 +298,11 @@ class BrandProfile(Record):
     # Market and language start empty on purpose: the Planner must never assume
     # a market or language.  They are only filled when the user confirms them.
     target_market: str = ""
+    # Every market the user selected, in order.  ``target_market`` stays the
+    # primary market used for research; ``target_markets`` records the full
+    # selection so a brand that targets several countries is not silently
+    # reduced to one.
+    target_markets: list[str] = field(default_factory=list)
     language: str = ""
     positioning: str = ""
     primary_scenario: str = ""
