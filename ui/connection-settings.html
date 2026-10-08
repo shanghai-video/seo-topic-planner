@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>DataForSEO connection</title>
+    <style>
+      :root { color-scheme: light dark; font-family: ui-sans-serif, system-ui, sans-serif; }
+      body { margin: 0; background: Canvas; color: CanvasText; }
+      main { max-width: 680px; margin: 0 auto; padding: 36px 24px; }
+      h1 { font-size: 24px; margin: 0 0 8px; }
+      p { line-height: 1.55; color: color-mix(in srgb, CanvasText 72%, Canvas); }
+      .card { border: 1px solid color-mix(in srgb, CanvasText 20%, Canvas); border-radius: 12px; padding: 18px; margin: 24px 0; }
+      .steps { margin: 20px 0; padding-left: 22px; line-height: 1.6; }
+      .steps li { margin: 8px 0; }
+      .status { font-weight: 700; margin: 6px 0 0; }
+      .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+      button { appearance: none; border: 0; border-radius: 8px; padding: 10px 14px; background: #6d28d9; color: white; cursor: pointer; font: inherit; }
+      button.secondary { background: color-mix(in srgb, CanvasText 12%, Canvas); color: CanvasText; }
+      button:disabled { opacity: .55; cursor: wait; }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .note { font-size: 14px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>DataForSEO connection</h1>
+      <p>Connect live DataForSEO research. Authorization happens in your browser; this Plugin never asks for, receives, or stores your DataForSEO login or password.</p>
+      <ol class="steps">
+        <li>Choose <strong>Connect DataForSEO</strong> below.</li>
+        <li>Approve the DataForSEO authorization in the browser tab that opens.</li>
+        <li>This screen finishes the official DataForSEO MCP connection and stores a short-lived token locally (user-only file).</li>
+      </ol>
+      <section class="card" aria-live="polite">
+        <div>Connection status</div>
+        <div id="status" class="status">Checking…</div>
+      </section>
+      <div class="actions">
+        <button id="connect" type="button">Connect DataForSEO</button>
+        <button id="refresh" class="secondary" type="button">Refresh status</button>
+        <button id="disconnect" class="secondary" type="button">Disconnect</button>
+      </div>
+      <p id="guidance" class="note"></p>
+      <p class="note">Live research is available only when the status reads <strong>LIVE / READY</strong>. Until then the status reads <strong>AUTH_REQUIRED</strong> and research is refused; there is no demo mode. Disconnect deletes the locally stored authorization and returns the Planner to <strong>AUTH_REQUIRED</strong>.</p>
+    </main>
+    <script>
+      const status = document.querySelector('#status');
+      const guidance = document.querySelector('#guidance');
+      const connectButton = document.querySelector('#connect');
+      const refreshButton = document.querySelector('#refresh');
+      const disconnectButton = document.querySelector('#disconnect');
+
+      function structured(output) {
+        return (output && (output.structuredContent || output)) || {};
+      }
+      async function call(name, args) {
+        return structured(await window.openai?.callTool?.(name, args || {}));
+      }
+      function busy(value) {
+        connectButton.disabled = value;
+        refreshButton.disabled = value;
+        disconnectButton.disabled = value;
+      }
+      function render(value) {
+        const state = value && value.status ? value.status : 'UNKNOWN';
+        const provider = value && value.provider ? value.provider : 'unknown provider';
+        const mode = value && value.data_mode ? value.data_mode : 'NOT_CONNECTED';
+        status.textContent = `${mode}: ${provider} (${state})`;
+        if (state === 'READY' && mode === 'LIVE') {
+          guidance.textContent = 'Live DataForSEO data is connected. Estimate research, then run it only after you confirm the displayed cost and budget.';
+        } else if (state === 'AWAITING_AUTHORIZATION') {
+          guidance.textContent = 'Waiting for you to approve the DataForSEO authorization in your browser.';
+        } else {
+          guidance.textContent = 'Choose Connect DataForSEO and approve the authorization in your browser. Research is refused until the connection is live.';
+        }
+      }
+      async function refresh() {
+        busy(true);
+        try {
+          render(await call('get_data_provider_status', { workspace_id: 'settings' }));
+        } catch (_) {
+          render({ status: 'UNAVAILABLE', provider: 'DataForSEO MCP' });
+        } finally {
+          busy(false);
+        }
+      }
+      async function connect() {
+        busy(true);
+        try {
+          const begun = await call('connect_dataforseo', { workspace_id: 'settings' });
+          if (begun.authorization_url) {
+            try { window.open(begun.authorization_url, '_blank', 'noopener'); } catch (_) {}
+          }
+          render(begun);
+          const done = await call('complete_dataforseo_connection', { workspace_id: 'settings' });
+          render(done);
+        } catch (error) {
+          guidance.textContent = 'Could not complete the DataForSEO connection. Please try again.';
+        } finally {
+          busy(false);
+        }
+      }
+      async function disconnect() {
+        busy(true);
+        try {
+          render(await call('disconnect_dataforseo', { workspace_id: 'settings' }));
+        } catch (_) {
+          guidance.textContent = 'Could not disconnect. Please try again.';
+        } finally {
+          busy(false);
+        }
+      }
+      connectButton.addEventListener('click', connect);
+      refreshButton.addEventListener('click', refresh);
+      disconnectButton.addEventListener('click', disconnect);
+      window.addEventListener('message', (event) => {
+        const data = event.data;
+        if (data && typeof data === 'object' && data.status) render(data);
+      });
+      refresh();
+    </script>
+  </body>
+</html>

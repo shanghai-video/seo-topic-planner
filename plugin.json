@@ -1,0 +1,27 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "seo-topic-planner",
+  "version": "0.6.0",
+  "description": "Decide which SEO content opportunities are worth pursuing, with visible cost controls and traceable evidence.",
+  "author": {
+    "name": "SEO Writer contributors"
+  },
+  "extensions": {
+    "com.openai": {
+      "onboardingSkill": "./skills/setup/SKILL.md",
+      "interface": {
+        "displayName": "SEO Topic Planner",
+        "shortDescription": "Evidence-led topic plans",
+        "longDescription": "Turns a website and brand brief into a typed brand entity registry, ranked evidence-backed SEO content opportunities with information-gain and readiness judgements, and an evidence-backed content plan once the SERP and relevant sources are researched.",
+        "developerName": "SEO Writer contributors",
+        "category": "Productivity",
+        "capabilities": ["Interactive"],
+        "defaultPrompt": [
+          "Help me identify the next SEO content opportunities for my website.",
+          "Estimate the research cost before researching our target topic.",
+          "Turn my chosen SEO opportunity into a funnel-staged content cluster."
+        ]
+      }
+    }
+  }
+}
