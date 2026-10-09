@@ -4,4 +4,4 @@
 this value through ``validate_package.py`` so a release cannot drift.
 """
 
-PLUGIN_VERSION = "0.7.0"
+PLUGIN_VERSION = "0.7.1"
