@@ -1,22 +1,41 @@
 # SEO Topic Planner
 
-A Codex plugin that does SEO topic research the way a senior strategist would: find what people search
+A Codex and Claude Code plugin that does SEO topic research the way a senior strategist would: find what people search
 for, see what Google ranks, read those pages, find what they fail to give the reader, check what the client
 can add, and outline pages around that information gain — with evidence for every claim.
 
 Published by [Lingyi Labs](https://lingyilabs.com).
 
-## Install in Codex
+## Install
 
 Requires Python 3.9+ available as `python3` and a DataForSEO account.
+
+**Codex**
 
 ```bash
 codex plugin marketplace add shanghai-video/seo-topic-planner
 codex plugin add seo-topic-planner@lingyi-labs
 ```
 
+Update with `codex plugin marketplace upgrade`.
+
+**Claude Code**
+
+```
+/plugin install seo-topic-planner --marketplace shanghai-video/seo-topic-planner
+```
+
+On Claude Code older than 2.1.275, add the marketplace first:
+
+```
+/plugin marketplace add shanghai-video/seo-topic-planner
+/plugin install seo-topic-planner@lingyi-labs
+```
+
+Update with `/plugin marketplace update lingyi-labs`.
+
 After installing, the setup skill connects DataForSEO through its browser consent page; no API password is
-entered in chat. `codex plugin marketplace upgrade` pulls new releases.
+entered in chat.
 
 ## What a run produces
 

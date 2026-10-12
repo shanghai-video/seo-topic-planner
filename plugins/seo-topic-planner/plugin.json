@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "seo-topic-planner",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "Evidence-led SEO topic research: keyword discovery and SERP-overlap clustering on DataForSEO, real reading of ranking pages, a verified content-gap analysis, and page outlines built around a proven information gain.",
   "author": {
     "name": "Lingyi Labs",

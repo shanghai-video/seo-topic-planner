@@ -1,0 +1,27 @@
+{
+  "name": "seo-topic-planner",
+  "version": "2.1.2",
+  "description": "Evidence-led SEO topic research: keyword discovery and SERP-overlap clustering on DataForSEO, real reading of ranking pages, a verified content-gap analysis, and page outlines built around a proven information gain.",
+  "author": {
+    "name": "Lingyi Labs",
+    "url": "https://lingyilabs.com"
+  },
+  "homepage": "https://lingyilabs.com",
+  "repository": "https://github.com/shanghai-video/seo-topic-planner",
+  "license": "MIT",
+  "keywords": [
+    "seo",
+    "dataforseo",
+    "keyword-research",
+    "content-strategy",
+    "serp"
+  ],
+  "mcpServers": {
+    "seo-topic-planner": {
+      "command": "python3",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/server/run.py"
+      ]
+    }
+  }
+}

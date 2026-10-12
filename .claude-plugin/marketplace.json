@@ -1,0 +1,18 @@
+{
+  "name": "lingyi-labs",
+  "owner": {
+    "name": "Lingyi Labs",
+    "url": "https://lingyilabs.com"
+  },
+  "metadata": {
+    "description": "Claude Code plugins published by Lingyi Labs."
+  },
+  "plugins": [
+    {
+      "name": "seo-topic-planner",
+      "source": "./plugins/seo-topic-planner",
+      "description": "Evidence-led SEO topic research on DataForSEO: keyword discovery, SERP-overlap clustering, verified content gaps and page outlines built around a proven information gain.",
+      "category": "productivity"
+    }
+  ]
+}

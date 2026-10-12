@@ -26,6 +26,17 @@ assert interface["developerName"] == manifest["author"]["name"], "developerName 
 assert set(mcp["mcpServers"]) == {"seo-topic-planner"}
 assert mcp["mcpServers"]["seo-topic-planner"]["type"] == "stdio"
 
+# Claude Code reads its own manifest; it must describe the same plugin and
+# launch the same server entry point as the Codex manifest and mcp.json.
+claude_manifest = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+for key in ("name", "version", "description", "author", "homepage", "repository", "license"):
+    assert claude_manifest[key] == manifest[key], f".claude-plugin/plugin.json {key} drifts from plugin.json"
+codex_server = mcp["mcpServers"]["seo-topic-planner"]
+claude_server = claude_manifest["mcpServers"]["seo-topic-planner"]
+assert claude_server["command"] == codex_server["command"], "Claude Code and Codex launch different commands"
+claude_args = [arg.replace("${CLAUDE_PLUGIN_ROOT}", "${PLUGIN_ROOT}") for arg in claude_server["args"]]
+assert claude_args == codex_server["args"], "Claude Code and Codex launch different server entry points"
+
 sys.path.insert(0, str(ROOT / "server"))
 from seo_topic_planner.mcp_server import TOOLS  # noqa: E402
 from seo_topic_planner.version import PLUGIN_VERSION  # noqa: E402

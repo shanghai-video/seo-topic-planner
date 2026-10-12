@@ -1,6 +1,6 @@
 # Lingyi Labs Codex plugins
 
-Codex plugin marketplace published by [Lingyi Labs](https://lingyilabs.com).
+Codex and Claude Code plugin marketplace published by [Lingyi Labs](https://lingyilabs.com).
 
 | Plugin | What it does |
 | --- | --- |
@@ -8,12 +8,31 @@ Codex plugin marketplace published by [Lingyi Labs](https://lingyilabs.com).
 
 ## Install
 
+Requires Python 3.9+ available as `python3` and a DataForSEO account.
+
+**Codex**
+
 ```bash
 codex plugin marketplace add shanghai-video/seo-topic-planner
 codex plugin add seo-topic-planner@lingyi-labs
 ```
 
-Update to the latest release with `codex plugin marketplace upgrade`.
+Update with `codex plugin marketplace upgrade`.
+
+**Claude Code**
+
+```
+/plugin install seo-topic-planner --marketplace shanghai-video/seo-topic-planner
+```
+
+On Claude Code older than 2.1.275, add the marketplace first:
+
+```
+/plugin marketplace add shanghai-video/seo-topic-planner
+/plugin install seo-topic-planner@lingyi-labs
+```
+
+Update with `/plugin marketplace update lingyi-labs`.
 
 ## License
 
