@@ -1,0 +1,19 @@
+{
+  "name": "lingyi-labs",
+  "interface": {
+    "displayName": "Lingyi Labs"
+  },
+  "plugins": [
+    {
+      "name": "seo-topic-planner",
+      "source": {
+        "source": "local",
+        "path": "./plugins/seo-topic-planner"
+      },
+      "policy": {
+        "installation": "AVAILABLE"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

@@ -1,17 +1,10 @@
-# Python
-__pycache__/
-*.py[cod]
-.venv/
-build/
-*.egg-info/
 
-# Tooling caches
-.pytest_cache/
-.ruff_cache/
-.coverage
-
-# Build output
-dist/
-
-# macOS
-.DS_Store
+# Local research data, credentials and client reports never belong here
+.env
+.env.*
+*.sqlite
+*.sqlite3
+*.db
+topic-planner-store.json
+dataforseo-oauth.json
+plugins/seo-topic-planner/reports/

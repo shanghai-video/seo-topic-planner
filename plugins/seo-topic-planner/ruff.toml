@@ -1,0 +1,15 @@
+# The plugin is a standalone distributable that runs on the host's `python3`
+# and declares support back to Python 3.9 (see server/pyproject.toml), so it is
+# linted against 3.9 even though the repository itself targets 3.12.  The rule
+# set mirrors the repository root.
+target-version = "py39"
+line-length = 110
+
+[lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[lint.per-file-ignores]
+# Client-facing prose (report labels, tool descriptions) reads better unwrapped.
+"server/seo_topic_planner/report.py" = ["E501"]
+"server/seo_topic_planner/mcp_server.py" = ["E501"]
+"server/tests/*" = ["E501"]

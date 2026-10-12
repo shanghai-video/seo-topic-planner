@@ -1,0 +1,8 @@
+[project]
+name = "seo-topic-planner-local-core"
+version = "2.1.1"
+description = "Local MCP Core for the SEO Topic Planner plugin"
+requires-python = ">=3.9"
+
+[tool.uv]
+package = false
